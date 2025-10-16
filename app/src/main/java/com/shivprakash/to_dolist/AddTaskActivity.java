@@ -1,14 +1,13 @@
 package com.shivprakash.to_dolist;
 
+import android.app.AlarmManager;
 import android.app.DatePickerDialog;
+import android.app.PendingIntent;
 import android.app.TimePickerDialog;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
-import android.view.View;
-import android.view.Window;
-import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.DatePicker;
@@ -17,23 +16,9 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.TimePicker;
 import android.widget.Toast;
+
 import androidx.appcompat.app.AppCompatActivity;
-import java.util.Calendar;
-import java.util.Locale;
-import android.app.DatePickerDialog;
-import android.app.TimePickerDialog;
-import android.content.ContentValues;
-import android.database.sqlite.SQLiteDatabase;
-import android.os.Bundle;
-import android.view.View;
-import android.widget.Button;
-import android.widget.DatePicker;
-import android.widget.EditText;
-import android.widget.Spinner;
-import android.widget.TextView;
-import android.widget.TimePicker;
-import android.widget.Toast;
-import androidx.appcompat.app.AppCompatActivity;
+
 import java.util.Calendar;
 import java.util.Locale;
 
@@ -45,16 +30,13 @@ public class AddTaskActivity extends AppCompatActivity {
     private Spinner categorySpinner;
     private Spinner prioritySpinner;
     private EditText notesEditText;
-
     private TaskDBHelper dbHelper;
-
-    private Calendar calendar;
-    private int mYear, mMonth, mDay, mHour, mMinute;
+    private Calendar selectedDateTime;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-       setContentView(R.layout.activity_add_task);
+        setContentView(R.layout.activity_add_task);
 
         selectedDateTextView = findViewById(R.id.selected_date_text_view);
         selectedTimeTextView = findViewById(R.id.selected_time_text_view);
@@ -66,12 +48,9 @@ public class AddTaskActivity extends AppCompatActivity {
         Button selectTimeButton = findViewById(R.id.button_select_due_time);
         Button addTaskButton = findViewById(R.id.button_add_task);
 
-        calendar = Calendar.getInstance();
-        mYear = calendar.get(Calendar.YEAR);
-        mMonth = calendar.get(Calendar.MONTH);
-        mDay = calendar.get(Calendar.DAY_OF_MONTH);
-        mHour = calendar.get(Calendar.HOUR_OF_DAY);
-        mMinute = calendar.get(Calendar.MINUTE);
+        selectedDateTime = Calendar.getInstance();
+        dbHelper = new TaskDBHelper(this);
+
         ArrayAdapter<CharSequence> categoryAdapter = ArrayAdapter.createFromResource(
                 this,
                 R.array.categories_array,
@@ -90,73 +69,61 @@ public class AddTaskActivity extends AppCompatActivity {
 
         updateDateAndTimeTextViews();
 
-        selectDateButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showDatePickerDialog();
-            }
-        });
-
-        selectTimeButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showTimePickerDialog();
-            }
-        });
-
-        addTaskButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                addTask();
-                Intent intent = new Intent(AddTaskActivity.this, MainActivity.class);
-                startActivity(intent);
-            }
-        });
-
-        dbHelper = new TaskDBHelper(this);
+        selectDateButton.setOnClickListener(view -> showDatePickerDialog());
+        selectTimeButton.setOnClickListener(view -> showTimePickerDialog());
+        addTaskButton.setOnClickListener(view -> addTask());
     }
 
     private void updateDateAndTimeTextViews() {
-        String dateString = String.format(Locale.getDefault(), "%02d/%02d/%d", mDay, mMonth + 1, mYear);
+        String dateString = String.format(Locale.getDefault(), "%02d/%02d/%d",
+                selectedDateTime.get(Calendar.DAY_OF_MONTH),
+                selectedDateTime.get(Calendar.MONTH) + 1,
+                selectedDateTime.get(Calendar.YEAR));
         selectedDateTextView.setText(dateString);
 
-        String timeString = String.format(Locale.getDefault(), "%02d:%02d", mHour, mMinute);
+        String timeString = String.format(Locale.getDefault(), "%02d:%02d",
+                selectedDateTime.get(Calendar.HOUR_OF_DAY),
+                selectedDateTime.get(Calendar.MINUTE));
         selectedTimeTextView.setText(timeString);
     }
 
     private void showDatePickerDialog() {
         DatePickerDialog datePickerDialog = new DatePickerDialog(
                 this,
-                new DatePickerDialog.OnDateSetListener() {
-                    @Override
-                    public void onDateSet(DatePicker view, int year, int month, int dayOfMonth) {
-                        mYear = year;
-                        mMonth = month;
-                        mDay = dayOfMonth;
-                        updateDateAndTimeTextViews();
-                    }
+                (DatePicker view, int year, int month, int dayOfMonth) -> {
+                    selectedDateTime.set(Calendar.YEAR, year);
+                    selectedDateTime.set(Calendar.MONTH, month);
+                    selectedDateTime.set(Calendar.DAY_OF_MONTH, dayOfMonth);
+                    updateDateAndTimeTextViews();
                 },
-                mYear, mMonth, mDay);
+                selectedDateTime.get(Calendar.YEAR),
+                selectedDateTime.get(Calendar.MONTH),
+                selectedDateTime.get(Calendar.DAY_OF_MONTH));
         datePickerDialog.show();
     }
 
     private void showTimePickerDialog() {
         TimePickerDialog timePickerDialog = new TimePickerDialog(
                 this,
-                new TimePickerDialog.OnTimeSetListener() {
-                    @Override
-                    public void onTimeSet(TimePicker view, int hourOfDay, int minute) {
-                        mHour = hourOfDay;
-                        mMinute = minute;
-                        updateDateAndTimeTextViews();
-                    }
+                (TimePicker view, int hourOfDay, int minute) -> {
+                    selectedDateTime.set(Calendar.HOUR_OF_DAY, hourOfDay);
+                    selectedDateTime.set(Calendar.MINUTE, minute);
+                    selectedDateTime.set(Calendar.SECOND, 0);
+                    updateDateAndTimeTextViews();
                 },
-                mHour, mMinute, true);
+                selectedDateTime.get(Calendar.HOUR_OF_DAY),
+                selectedDateTime.get(Calendar.MINUTE),
+                true);
         timePickerDialog.show();
     }
 
     private void addTask() {
         String task = taskEditText.getText().toString().trim();
+        if (task.isEmpty()) {
+            Toast.makeText(this, R.string.error_empty_task, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         String category = categorySpinner.getSelectedItem().toString();
         String priority = prioritySpinner.getSelectedItem().toString();
         String notes = notesEditText.getText().toString().trim();
@@ -176,21 +143,32 @@ public class AddTaskActivity extends AppCompatActivity {
         long newRowId = db.insert(TaskContract.TaskEntry.TABLE_NAME, null, values);
         db.close();
         if (newRowId == -1) {
-            Toast.makeText(this, "Failed to add task", Toast.LENGTH_SHORT).show();
-        } else {
-            Toast.makeText(this, "Task added successfully", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.error_add_task, Toast.LENGTH_SHORT).show();
+            return;
         }
+
+        scheduleReminder(task, notes);
+        Toast.makeText(this, R.string.task_added_message, Toast.LENGTH_SHORT).show();
+        finish();
     }
-}
 
-
-
-private void scheduleReminder(long triggerAtMillis, String title, String text){
-    android.app.AlarmManager am = (android.app.AlarmManager) getSystemService(ALARM_SERVICE);
-    android.content.Intent i = new android.content.Intent(this, ReminderReceiver.class);
-    i.putExtra("title", title); i.putExtra("text", text);
-    android.app.PendingIntent pi = android.app.PendingIntent.getBroadcast(this, (int)System.currentTimeMillis(), i, android.app.PendingIntent.FLAG_IMMUTABLE);
-    if (am != null){
-        am.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, triggerAtMillis, pi);
+    private void scheduleReminder(String title, String text) {
+        long triggerAtMillis = selectedDateTime.getTimeInMillis();
+        if (triggerAtMillis <= System.currentTimeMillis()) {
+            return;
+        }
+        AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
+        Intent intent = new Intent(this, ReminderReceiver.class);
+        intent.putExtra("title", title);
+        intent.putExtra("text", text);
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                this,
+                (int) System.currentTimeMillis(),
+                intent,
+                PendingIntent.FLAG_IMMUTABLE
+        );
+        if (alarmManager != null) {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent);
+        }
     }
 }
