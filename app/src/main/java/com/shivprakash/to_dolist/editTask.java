@@ -4,11 +4,9 @@ import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
-import android.view.View;
-import android.view.Window;
-import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.DatePicker;
@@ -17,23 +15,9 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.TimePicker;
 import android.widget.Toast;
+
 import androidx.appcompat.app.AppCompatActivity;
-import java.util.Calendar;
-import java.util.Locale;
-import android.app.DatePickerDialog;
-import android.app.TimePickerDialog;
-import android.content.ContentValues;
-import android.database.sqlite.SQLiteDatabase;
-import android.os.Bundle;
-import android.view.View;
-import android.widget.Button;
-import android.widget.DatePicker;
-import android.widget.EditText;
-import android.widget.Spinner;
-import android.widget.TextView;
-import android.widget.TimePicker;
-import android.widget.Toast;
-import androidx.appcompat.app.AppCompatActivity;
+
 import java.util.Calendar;
 import java.util.Locale;
 
@@ -44,22 +28,20 @@ public class editTask extends AppCompatActivity {
     private Spinner categorySpinner;
     private Spinner prioritySpinner;
     private EditText notesEditText;
-    private TextView text_view_task;
+    private TextView taskTitle;
     private TaskDBHelper dbHelper;
-
-    private Calendar calendar;
-    String task;
-    Intent intent;
-    private int mYear, mMonth, mDay, mHour, mMinute;
+    private Calendar selectedDateTime;
+    private String originalTaskName;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-       setContentView(R.layout.activity_edit_task);
-        intent = getIntent();
-        task = intent.getStringExtra("task");
-        text_view_task=findViewById(R.id.text_view_task);
-        text_view_task.setText(task);
+        setContentView(R.layout.activity_edit_task);
+
+        Intent intent = getIntent();
+        originalTaskName = intent.getStringExtra("task");
+
+        taskTitle = findViewById(R.id.text_view_task);
         selectedDateTextView = findViewById(R.id.selected_date_text_view);
         selectedTimeTextView = findViewById(R.id.selected_time_text_view);
         categorySpinner = findViewById(R.id.category_spinner);
@@ -67,14 +49,11 @@ public class editTask extends AppCompatActivity {
         notesEditText = findViewById(R.id.notes_edit_text);
         Button selectDateButton = findViewById(R.id.button_select_due_date);
         Button selectTimeButton = findViewById(R.id.button_select_due_time);
-        Button addTaskButton = findViewById(R.id.button_add_task);
+        Button saveButton = findViewById(R.id.button_add_task);
 
-        calendar = Calendar.getInstance();
-        mYear = calendar.get(Calendar.YEAR);
-        mMonth = calendar.get(Calendar.MONTH);
-        mDay = calendar.get(Calendar.DAY_OF_MONTH);
-        mHour = calendar.get(Calendar.HOUR_OF_DAY);
-        mMinute = calendar.get(Calendar.MINUTE);
+        dbHelper = new TaskDBHelper(this);
+        selectedDateTime = Calendar.getInstance();
+
         ArrayAdapter<CharSequence> categoryAdapter = ArrayAdapter.createFromResource(
                 this,
                 R.array.categories_array,
@@ -91,75 +70,126 @@ public class editTask extends AppCompatActivity {
         priorityAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         prioritySpinner.setAdapter(priorityAdapter);
 
+        if (originalTaskName != null) {
+            taskTitle.setText(getString(R.string.task_label_with_name, originalTaskName));
+            loadExistingTask();
+        }
+
         updateDateAndTimeTextViews();
 
-        selectDateButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showDatePickerDialog();
-            }
-        });
+        selectDateButton.setOnClickListener(view -> showDatePickerDialog());
+        selectTimeButton.setOnClickListener(view -> showTimePickerDialog());
+        saveButton.setOnClickListener(view -> updateTask());
+    }
 
-        selectTimeButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showTimePickerDialog();
-            }
-        });
+    private void loadExistingTask() {
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        Cursor cursor = db.query(
+                TaskContract.TaskEntry.TABLE_NAME,
+                null,
+                TaskContract.TaskEntry.COLUMN_TASK + " = ?",
+                new String[]{originalTaskName},
+                null,
+                null,
+                null
+        );
+        if (cursor.moveToFirst()) {
+            String category = cursor.getString(cursor.getColumnIndexOrThrow(TaskContract.TaskEntry.COLUMN_CATEGORY));
+            String priority = cursor.getString(cursor.getColumnIndexOrThrow(TaskContract.TaskEntry.COLUMN_PRIORITY));
+            String notes = cursor.getString(cursor.getColumnIndexOrThrow(TaskContract.TaskEntry.COLUMN_NOTES));
+            String dueDate = cursor.getString(cursor.getColumnIndexOrThrow(TaskContract.TaskEntry.COLUMN_DUE_DATE));
+            String dueTime = cursor.getString(cursor.getColumnIndexOrThrow(TaskContract.TaskEntry.COLUMN_DUE_TIME));
 
-        addTaskButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                editTask(task);
-                Toast.makeText(editTask.this, "Task edited", Toast.LENGTH_SHORT).show();
-                Intent intent = new Intent(editTask.this, MainActivity.class);
-                startActivity(intent);
-            }
-        });
+            notesEditText.setText(notes);
+            setSpinnerSelection(categorySpinner, category);
+            setSpinnerSelection(prioritySpinner, priority);
+            parseExistingDateTime(dueDate, dueTime);
+        }
+        cursor.close();
+        db.close();
+    }
 
-        dbHelper = new TaskDBHelper(this);
+    private void parseExistingDateTime(String dueDate, String dueTime) {
+        if (dueDate != null && dueDate.contains("/")) {
+            String[] dateParts = dueDate.split("/");
+            if (dateParts.length == 3) {
+                int day = Integer.parseInt(dateParts[0]);
+                int month = Integer.parseInt(dateParts[1]) - 1;
+                int year = Integer.parseInt(dateParts[2]);
+                selectedDateTime.set(Calendar.YEAR, year);
+                selectedDateTime.set(Calendar.MONTH, month);
+                selectedDateTime.set(Calendar.DAY_OF_MONTH, day);
+            }
+        }
+        if (dueTime != null && dueTime.contains(":")) {
+            String[] timeParts = dueTime.split(":");
+            if (timeParts.length >= 2) {
+                int hour = Integer.parseInt(timeParts[0]);
+                int minute = Integer.parseInt(timeParts[1]);
+                selectedDateTime.set(Calendar.HOUR_OF_DAY, hour);
+                selectedDateTime.set(Calendar.MINUTE, minute);
+                selectedDateTime.set(Calendar.SECOND, 0);
+            }
+        }
+    }
+
+    private void setSpinnerSelection(Spinner spinner, String value) {
+        for (int i = 0; i < spinner.getCount(); i++) {
+            if (spinner.getItemAtPosition(i).toString().equalsIgnoreCase(value)) {
+                spinner.setSelection(i);
+                break;
+            }
+        }
     }
 
     private void updateDateAndTimeTextViews() {
-        String dateString = String.format(Locale.getDefault(), "%02d/%02d/%d", mDay, mMonth + 1, mYear);
+        String dateString = String.format(Locale.getDefault(), "%02d/%02d/%d",
+                selectedDateTime.get(Calendar.DAY_OF_MONTH),
+                selectedDateTime.get(Calendar.MONTH) + 1,
+                selectedDateTime.get(Calendar.YEAR));
         selectedDateTextView.setText(dateString);
 
-        String timeString = String.format(Locale.getDefault(), "%02d:%02d", mHour, mMinute);
+        String timeString = String.format(Locale.getDefault(), "%02d:%02d",
+                selectedDateTime.get(Calendar.HOUR_OF_DAY),
+                selectedDateTime.get(Calendar.MINUTE));
         selectedTimeTextView.setText(timeString);
     }
 
     private void showDatePickerDialog() {
         DatePickerDialog datePickerDialog = new DatePickerDialog(
                 this,
-                new DatePickerDialog.OnDateSetListener() {
-                    @Override
-                    public void onDateSet(DatePicker view, int year, int month, int dayOfMonth) {
-                        mYear = year;
-                        mMonth = month;
-                        mDay = dayOfMonth;
-                        updateDateAndTimeTextViews();
-                    }
+                (DatePicker view, int year, int month, int dayOfMonth) -> {
+                    selectedDateTime.set(Calendar.YEAR, year);
+                    selectedDateTime.set(Calendar.MONTH, month);
+                    selectedDateTime.set(Calendar.DAY_OF_MONTH, dayOfMonth);
+                    updateDateAndTimeTextViews();
                 },
-                mYear, mMonth, mDay);
+                selectedDateTime.get(Calendar.YEAR),
+                selectedDateTime.get(Calendar.MONTH),
+                selectedDateTime.get(Calendar.DAY_OF_MONTH));
         datePickerDialog.show();
     }
 
     private void showTimePickerDialog() {
         TimePickerDialog timePickerDialog = new TimePickerDialog(
                 this,
-                new TimePickerDialog.OnTimeSetListener() {
-                    @Override
-                    public void onTimeSet(TimePicker view, int hourOfDay, int minute) {
-                        mHour = hourOfDay;
-                        mMinute = minute;
-                        updateDateAndTimeTextViews();
-                    }
+                (TimePicker view, int hourOfDay, int minute) -> {
+                    selectedDateTime.set(Calendar.HOUR_OF_DAY, hourOfDay);
+                    selectedDateTime.set(Calendar.MINUTE, minute);
+                    selectedDateTime.set(Calendar.SECOND, 0);
+                    updateDateAndTimeTextViews();
                 },
-                mHour, mMinute, true);
+                selectedDateTime.get(Calendar.HOUR_OF_DAY),
+                selectedDateTime.get(Calendar.MINUTE),
+                true);
         timePickerDialog.show();
     }
 
-    private void editTask(String task) {
+    private void updateTask() {
+        if (originalTaskName == null) {
+            finish();
+            return;
+        }
         String category = categorySpinner.getSelectedItem().toString();
         String priority = prioritySpinner.getSelectedItem().toString();
         String notes = notesEditText.getText().toString().trim();
@@ -168,28 +198,26 @@ public class editTask extends AppCompatActivity {
 
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         ContentValues values = new ContentValues();
-        values.put(TaskContract.TaskEntry.COLUMN_TASK, task);
         values.put(TaskContract.TaskEntry.COLUMN_CATEGORY, category);
         values.put(TaskContract.TaskEntry.COLUMN_PRIORITY, priority);
         values.put(TaskContract.TaskEntry.COLUMN_NOTES, notes);
         values.put(TaskContract.TaskEntry.COLUMN_DUE_DATE, dueDate);
         values.put(TaskContract.TaskEntry.COLUMN_DUE_TIME, dueTime);
         values.put(TaskContract.TaskEntry.COLUMN_COMPLETED, 0);
-        db.update(TaskContract.TaskEntry.TABLE_NAME,values,TaskContract.TaskEntry.COLUMN_TASK + " = ?", new String[]{task});
+
+        int rowsUpdated = db.update(
+                TaskContract.TaskEntry.TABLE_NAME,
+                values,
+                TaskContract.TaskEntry.COLUMN_TASK + " = ?",
+                new String[]{originalTaskName}
+        );
         db.close();
 
+        if (rowsUpdated > 0) {
+            Toast.makeText(this, R.string.task_updated_message, Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, R.string.error_update_task, Toast.LENGTH_SHORT).show();
+        }
+        finish();
     }
-}
-
-
-
-private void scheduleReminder(long triggerAtMillis, String title, String text){
-    android.app.AlarmManager am = (android.app.AlarmManager) getSystemService(ALARM_SERVICE);
-    android.content.Intent i = new android.content.Intent(this, ReminderReceiver.class);
-    i.putExtra("title", title); i.putExtra("text", text);
-    android.app.PendingIntent pi = android.app.PendingIntent.getBroadcast(this, (int)System.currentTimeMillis(), i, android.app.PendingIntent.FLAG_IMMUTABLE);
-    if (am != null){
-        am.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, triggerAtMillis, pi);
-    }
-
 }

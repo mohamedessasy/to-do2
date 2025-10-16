@@ -16,7 +16,7 @@
             android:id="@+id/text_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Task Name"
+            android:text=""
             android:textSize="18sp"
             android:textStyle="bold" />
 
@@ -36,7 +36,7 @@
                 android:id="@+id/text_date"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Date: May 14, 2024"
+                android:text=""
                 android:textSize="14sp" />
 
             <TextView
@@ -44,7 +44,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:text="Time: 10:00 AM"
+                android:text=""
                 android:textSize="14sp" />
 
         </LinearLayout>
@@ -54,7 +54,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Category: "
+            android:text=""
             android:textSize="14sp" />
 
         <TextView
@@ -62,7 +62,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Priority: "
+            android:text=""
             android:textSize="14sp" />
 
         <TextView
@@ -70,7 +70,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Notes: "
+            android:text=""
             android:textSize="14sp" />
 
         <LinearLayout
