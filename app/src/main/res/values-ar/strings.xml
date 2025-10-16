@@ -1,0 +1,16 @@
+<resources>
+    <string name="search">بحث</string>
+    <string name="sort_by_priority">ترتيب حسب الأولوية</string>
+    <string name="sort_by_due">ترتيب حسب التاريخ</string>
+    <string name="filter_today">تصفية: اليوم</string>
+    <string name="filter_all">تصفية: الكل</string>
+    <string name="reports">تقارير</string>
+    <string name="empty_state_title">لا توجد مهام بعد</string>
+    <string name="empty_state_hint">أضف أول مهمة عبر زر +</string>
+    <string name="undo">تراجع</string>
+    <string name="deleted">تم حذف المهمة</string>
+    <string name="notifications_channel_name">تذكيرات المهام</string>
+    <string name="notifications_channel_desc">تنبيهات لمواعيد المهام</string>
+    <string name="pref_sound_title">صوت الأزرار</string>
+    <string name="pref_sound_summary">تشغيل صوت النقرة عند الضغط</string>
+</resources>
